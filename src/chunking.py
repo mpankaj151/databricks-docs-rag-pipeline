@@ -1,25 +1,41 @@
-"""Token-aware text chunking for RAG pipeline"""
+"""
+Step 2: DATA CHUNKING
+---------------------
+After we extract the plain text (Ingestion), we have a problem: documents are often too long!
+AI models have a "context window" (a maximum amount of text they can process at once). Also, 
+if we pass a whole 10-page document to the AI just to answer a specific question, it gets confused.
+
+The solution is "Chunking" - slicing the long document into smaller, bite-sized pieces (chunks).
+When the user asks a question, we only find the 3-5 most relevant chunks and give those to the AI.
+
+To ensure we don't accidentally cut a sentence exactly in half and lose its meaning, we use 
+an "overlap". E.g., if Chunk 1 ends with "Delta Lake provides", Chunk 2 might start with 
+"Delta Lake provides ACID transactions", ensuring the context is preserved across the cut.
+"""
 import json
 from typing import List, Dict
 from pathlib import Path
 import tiktoken
-from src.models import DocChunk
 
 
 def get_tokenizer(model_name: str = "cl100k_base"):
-    """Get tiktoken tokenizer for token counting"""
+    """
+    Get a tokenizer to count "tokens". 
+    A token is roughly 3/4 of a word. AI models don't read words, they read tokens.
+    We chunk by token count, not character count, to accurately match the AI's limits.
+    """
     return tiktoken.get_encoding(model_name)
 
 
 def tokenize(text: str, tokenizer=None) -> List[int]:
-    """Convert text to token IDs"""
+    """Convert a string of text into a list of integer token IDs."""
     if tokenizer is None:
         tokenizer = get_tokenizer()
     return tokenizer.encode(text, disallowed_special=())
 
 
 def detokenize(tokens: List[int], tokenizer=None) -> str:
-    """Convert token IDs back to text"""
+    """Convert a list of token IDs back into human-readable text."""
     if tokenizer is None:
         tokenizer = get_tokenizer()
     return tokenizer.decode(tokens)
@@ -31,20 +47,18 @@ def chunk_document(
     overlap: int = 50,
     tokenizer=None
 ) -> List[Dict]:
-    """Split a document into overlapping chunks of specified token size.
+    """
+    Split a document into overlapping chunks.
     
     Args:
-        doc: Document dict with doc_id, url, title, content
-        chunk_size: Max tokens per chunk
-        overlap: Number of overlapping tokens between consecutive chunks
-        tokenizer: Optional tiktoken tokenizer instance
-    
-    Returns:
-        List of chunk dicts with doc_id, chunk_id, text, metadata
+        doc: The document dictionary from the ingestion step.
+        chunk_size: How many tokens each chunk should contain.
+        overlap: How many tokens should overlap between consecutive chunks.
     """
     if tokenizer is None:
         tokenizer = get_tokenizer()
     
+    # 1. Convert the entire document text into a massive list of tokens
     tokens = tokenize(doc["content"], tokenizer)
     chunks = []
     
@@ -53,17 +67,27 @@ def chunk_document(
     
     start = 0
     chunk_id = 0
+    
+    # The "step" is how far we move the window forward for the next chunk.
+    # If chunk_size is 256 and overlap is 50, we move forward 206 tokens each time.
     step = chunk_size - overlap
-    
-    # Safety: step must be positive to avoid infinite loop
     if step <= 0:
-        step = max(1, chunk_size)
+        step = max(1, chunk_size)  # Prevent infinite loops if overlap is configured badly
     
+    # 2. Slide a window over the tokens to create the chunks
     while start < len(tokens):
+        # Calculate where this chunk ends
         end = min(start + chunk_size, len(tokens))
+        
+        # Slice out the tokens for this chunk
         chunk_tokens = tokens[start:end]
+        
+        # Convert tokens back into plain text
         chunk_text = detokenize(chunk_tokens, tokenizer)
         
+        # 3. Store the chunk along with metadata
+        # Metadata is CRITICAL in RAG. We need to remember exactly which document 
+        # this chunk came from, so we can cite our sources later!
         chunks.append({
             "doc_id": doc["doc_id"],
             "chunk_id": chunk_id,
@@ -77,9 +101,8 @@ def chunk_document(
         })
         
         chunk_id += 1
-        start += step
+        start += step  # Slide the window forward
         
-        # If we've consumed all tokens, stop
         if end >= len(tokens):
             break
     
@@ -92,25 +115,15 @@ def chunk_all_documents(
     chunk_size: int = 256,
     overlap: int = 50
 ) -> int:
-    """Load raw docs and chunk them all.
-    
-    Returns:
-        Number of chunks created
-    """
+    """Read all ingested documents, chunk them, and save the chunks to a file."""
     tokenizer = get_tokenizer()
-    
     all_chunks = []
     
     with open(input_path, "r") as f:
         for line in f:
             if line.strip():
                 doc = json.loads(line)
-                chunks = chunk_document(
-                    doc,
-                    chunk_size=chunk_size,
-                    overlap=overlap,
-                    tokenizer=tokenizer
-                )
+                chunks = chunk_document(doc, chunk_size, overlap, tokenizer)
                 all_chunks.extend(chunks)
     
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)

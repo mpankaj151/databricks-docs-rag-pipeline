@@ -1,4 +1,20 @@
-"""End-to-end RAG pipeline"""
+"""
+ORCHESTRATION: The Pipeline
+---------------------------
+This file is the "Manager". It ties all the separate RAG steps together into one easy-to-use
+system. When a user asks a question, this file coordinates the Retriever and the LLM.
+
+The full flow of a user query:
+1. User calls `pipeline.query("How do I make a table?")`
+2. Pipeline asks `retriever` to find chunks matching the question.
+3. (Optional) Pipeline asks `reranker` to re-score and re-order those chunks to ensure the 
+   best ones are at the top.
+4. Pipeline takes the text from those chunks, bundles them with the question, and sends 
+   them to the `llm`.
+5. The `llm` reads the chunks, formulates an answer, and returns it.
+6. Pipeline packages the answer, the chunks (so we can show the user our sources!), and 
+   timing data into a `QueryResult` object.
+"""
 import json
 import time
 from pathlib import Path
@@ -22,46 +38,48 @@ class RAGPipeline:
         self.llm = None
     
     def load(self, skip_llm: bool = False):
-        """Load all components"""
-        # Load embedding model
+        """Load all components into memory (Database, Models, etc.)"""
+        # Load embedding model (Step 3)
         self.embedding_model = get_embedding_model(self.config.embedding_model)
         
-        # Load FAISS index
+        # Load FAISS index database (Step 4)
         self.index = FAISSIndex.load(
             self.config.faiss_index,
             self.config.vectometa
         )
         
-        # Create retriever
+        # Create retriever (Step 5)
         self.retriever = Retriever(
             self.index,
             self.embedding_model,
             self.config.top_k
         )
         
-        # Load reranker if enabled
+        # Load reranker if enabled (Advanced Retrieval)
         if self.config.use_reranker:
             self.reranker = Reranker(self.config.reranker_model)
         
-        # Load LLM
+        # Load AI Generator (Step 6)
         if not skip_llm:
             self.llm = OllamaLLM()
     
     def query(self, question: str, skip_llm: bool = False) -> QueryResult:
-        """Query the RAG pipeline"""
+        """
+        The main function. Takes a question, finds documents, and generates an answer.
+        """
         start_time = time.time()
         
-        # Retrieve chunks
+        # Step 5: Retrieve relevant document chunks from the vector database
         chunks = self.retriever.retrieve(question)
         
-        # Rerank if enabled
+        # Advanced Step: Rerank chunks using a more powerful AI model to improve accuracy
         if self.reranker and len(chunks) > self.config.top_k // 2:
             chunks = self.reranker.rerank(question, chunks, top_k=self.config.top_k)
         
-        # Generate answer
+        # Step 6: Generate answer using the chunks as an "open book"
         answer = None
         if not skip_llm and self.llm:
-            # Build context
+            # Combine all chunk texts into one big string separated by dashed lines
             context = "\n\n---\n\n".join([chunk.text for chunk in chunks])
             try:
                 answer = self.llm.generate_with_context(question, context)
@@ -70,6 +88,7 @@ class RAGPipeline:
         
         latency_ms = (time.time() - start_time) * 1000
         
+        # Return everything, including the sources we used, so the user can verify the AI's claims
         return QueryResult(
             question=question,
             retrieved_chunks=chunks,
@@ -78,7 +97,7 @@ class RAGPipeline:
         )
     
     def query_with_sources(self, question: str, skip_llm: bool = False) -> dict:
-        """Query and return answer with source references"""
+        """A convenience function to return the answer and a simplified list of source URLs."""
         result = self.query(question, skip_llm)
         
         return {
@@ -96,7 +115,7 @@ class RAGPipeline:
         }
     
     def log_query(self, question: str, result: QueryResult):
-        """Log query to file"""
+        """Keep a log of what users are asking so we can improve the system later."""
         Path(self.config.query_log).parent.mkdir(parents=True, exist_ok=True)
         with open(self.config.query_log, "a") as f:
             f.write(json.dumps({
@@ -108,7 +127,7 @@ class RAGPipeline:
 
 
 def get_pipeline(skip_llm: bool = False) -> RAGPipeline:
-    """Get or create pipeline singleton"""
+    """Helper to initialize and get the pipeline."""
     pipeline = RAGPipeline()
     pipeline.load(skip_llm)
     return pipeline
