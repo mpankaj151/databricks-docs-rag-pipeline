@@ -1,72 +1,160 @@
-# Databricks Delta Lake & Lakeflow RAG Pipeline
+# Databricks Docs RAG Pipeline
 
-Local RAG system to answer developer questions about Databricks Delta Lake and Lakeflow Declarative Pipeline documentation.
+A modular, configurable RAG (Retrieval-Augmented Generation) pipeline for Databricks documentation with **multiple integration options**. Supports REST API, Tool/MCP, LangChain, AWS Lambda, and CLI — all from a single codebase.
+
+## Features
+
+- **Two-Step RAG**: Enterprise pattern that prevents hallucination by forcing the LLM to answer using ONLY the retrieved context
+- **Config-Driven**: All settings in `config.yaml` — no code changes needed to switch integrations
+- **Multiple Integrations**: REST API, Tool/MCP, LangChain, AWS Lambda, CLI — pick what fits your stack
+- **Keyword Auto-Trigger**: Automatically activates RAG when Databricks-related keywords are detected
+- **768-dim Embeddings**: Full support for `all-mpnet-base-v2` on Apple Silicon (64GB RAM)
+
+## Quick Start
+
+### 1. Install
+
+```bash
+# Clone and install in dev mode
+git clone https://github.com/yourusername/databricks-docs-rag-pipeline
+cd databricks-docs-rag-pipeline
+pip install -e .
+
+# Or install from PyPI (when published)
+pip install databricks-docs-rag-pipeline
+```
+
+### 2. Configure
+
+Edit `config.yaml`:
+
+```yaml
+llm:
+  model: "qwen3.5:cloud"
+  base_url: "http://localhost:11434"
+
+integrations:
+  rest_api:
+    enabled: true
+    port: 8000
+```
+
+### 3. Use (5 ways)
+
+| Option | Command | Best For |
+|--------|---------|---------|
+| **REST API** | `python -m rag_pipeline.integrations.rest_api` | Web apps, agents, webhooks |
+| **CLI** | `rag-cli "How to create a Delta table?"` | Local dev, scripts |
+| **Python** | `RAGPipeline().query("How to create a Delta table?")` | Custom scripts, notebooks |
+| **LangChain** | `get_langchain_tool()` | LangChain agents |
+| **Lambda** | Deploy `lambda_handler.py` to AWS | Serverless production |
 
 ## Architecture
 
 ```
-docs → chunk (256 tokens, 50 overlap) → embed (all-mpnet-base-v2) → FAISS index → retrieve top-k → augment prompt → query LLM
+src/rag_pipeline/
+├── config.py              # YAML config loader with Pydantic models
+├── core/
+│   ├── chunking.py        # Token-aware text chunking
+│   ├── embed.py           # sentence-transformers wrapper
+│   ├── vectorstore.py     # FAISS index (build, search, save, load)
+│   ├── ingest.py          # HTML fetching and document extraction
+│   └── models.py          # Pydantic data models
+├── pipeline/
+│   ├── rag.py            # Two-Step RAG (retrieve → generate)
+│   └── keyword_detector.py  # Auto-trigger keyword detection
+├── llm/
+│   └── ollama.py         # Ollama LLM client
+└── integrations/
+    ├── rest_api.py       # FastAPI server (port 8000)
+    ├── cli.py            # CLI wrapper (rag-cli)
+    ├── tool.py           # Tool/MCP definition
+    ├── langchain.py      # LangChain tool
+    └── lambda_handler.py # AWS Lambda handler
 ```
 
-## Setup
+## Two-Step RAG (Anti-Hallucination)
 
-1. Install dependencies:
-   ```bash
-   cd ~/Document/self/rag-practice
-   pip install -r requirements.txt
-   ```
+This pipeline uses the enterprise-standard Two-Step pattern:
 
-2. Install and start Ollama:
-   ```bash
-   brew install ollama
-   ollama serve
-   ollama pull glm-5.1
-   ```
+**Step 1 — Retrieve**: Query the FAISS vector index to find relevant documentation chunks.
 
-3. Build the index with sample data:
-   ```bash
-   python scripts/setup_sample_data.py
-   ```
+**Step 2 — Generate**: Send the retrieved context to the LLM with a strict prompt that forces it to answer using ONLY the provided context:
 
-4. Run the REPL:
-   ```bash
-   python -m src.repl
-   ```
+```
+You must answer using ONLY the provided context below.
 
-## Pipeline Steps
+RULES:
+1. Answer ONLY from the context provided
+2. If the context doesn't contain the answer, say "I don't have enough information"
+3. NEVER use your own knowledge
+4. Be concise and factual
 
-1. **Ingest** - Fetch Databricks docs (or use sample data)
-2. **Chunk** - Split into 256-token chunks with 50-token overlap
-3. **Embed** - Generate embeddings using all-mpnet-base-v2
-4. **Index** - Build FAISS vector index
-5. **Query** - Retrieve relevant chunks and ask LLM
+Context:
+{retrieved_chunks}
 
-## Testing
+Question: {question}
+```
 
-Run all tests:
+This prevents the LLM from hallucinating answers not supported by the retrieved documentation.
+
+## Configuration Reference
+
+All settings in `config.yaml`:
+
+```yaml
+# Embedding model
+embeddings:
+  model: "sentence-transformers/all-mpnet-base-v2"  # 768-dim
+  batch_size: 64
+
+# LLM
+llm:
+  model: "qwen3.5:cloud"
+  base_url: "http://localhost:11434"
+  temperature: 0.2
+  max_tokens: 512
+
+# Chunking
+chunk_size_tokens: 256
+chunk_overlap_tokens: 50
+
+# Retrieval
+top_k: 5
+
+# Integrations
+integrations:
+  rest_api:
+    enabled: true
+    host: "0.0.0.0"
+    port: 8000
+  tool:
+    enabled: true
+    auto_trigger: true
+    keywords:
+      - "delta lake"
+      - "databricks"
+      - "spark sql"
+      # ...
+```
+
+## Development
+
 ```bash
-python -m pytest tests/ -v
+# Install with dev dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest tests/
+
+# Run with auto-reload (REST API)
+python -m rag_pipeline.integrations.rest_api
+
+# Lint
+ruff check src/
+black src/
 ```
 
-## Project Structure
+## License
 
-```
-rag-practice/
-├── config.yaml          # Configuration parameters
-├── requirements.txt     # Python dependencies
-├── src/
-│   ├── config.py        # Config loading
-│   ├── models.py        # Pydantic data models
-│   ├── ingest.py        # Documentation crawler
-│   ├── chunking.py      # Token-aware text chunking
-│   ├── embed.py         # Embedding generation
-│   ├── vectorstore.py   # FAISS index management
-│   ├── retrieval.py     # Query retrieval
-│   ├── reranker.py      # Optional cross-encoder reranker
-│   ├── llm.py           # Ollama LLM integration
-│   ├── pipeline.py      # End-to-end RAG pipeline
-│   └── repl.py          # Interactive REPL
-├── tests/               # Unit tests
-├── data/                # Generated data (index, embeddings)
-└── scripts/             # Setup and benchmark scripts
-```
+MIT

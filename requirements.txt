@@ -1,10 +1,18 @@
+# Databricks Docs RAG Pipeline
+# Python dependencies
+
 sentence-transformers>=2.2.2
 faiss-cpu>=1.9.0
-beautifulsoup4>=4.12.0
-lxml>=4.9.0
-requests>=2.31.0
+fastapi>=0.100.0
+uvicorn>=0.22.0
 pydantic>=2.0.0
 pyyaml>=6.0
+requests>=2.31.0
 tiktoken>=0.5.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
 numpy>=1.24.0
 torch>=2.0.0
+
+# Optional: for LangChain integration
+langchain-core>=0.1.0

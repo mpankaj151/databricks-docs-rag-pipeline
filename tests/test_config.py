@@ -1,44 +1,139 @@
-"""Tests for config loading"""
+"""Tests for the configuration system."""
 import pytest
-from pathlib import Path
-from src.config import Config, reset_config
+from rag_pipeline.config import (
+    Config,
+    load_config,
+    get_config,
+    set_config,
+    reset_config,
+    DataSource,
+    EmbeddingsConfig,
+    LLMConfig,
+    RestAPIConfig,
+    ToolConfig,
+)
 
 
-def test_config_loads_defaults():
-    """Config should provide sensible defaults without a YAML file"""
-    config = Config()
-    assert config.embedding_model == "sentence-transformers/all-mpnet-base-v2"
-    assert config.chunk_size_tokens == 256
-    assert config.chunk_overlap_tokens == 50
-    assert config.top_k == 5
+class TestConfigDefaults:
+    """Config should provide sensible defaults."""
+
+    def test_embed_model_default(self):
+        assert Config().embeddings.model == "sentence-transformers/all-mpnet-base-v2"
+
+    def test_chunk_size_default(self):
+        assert Config().chunk_size_tokens == 256
+        assert Config().chunk_overlap_tokens == 50
+
+    def test_top_k_default(self):
+        assert Config().top_k == 5
+
+    def test_llm_defaults(self):
+        cfg = Config().llm
+        assert cfg.model == "qwen3.5:cloud"
+        assert cfg.base_url == "http://localhost:11434"
+        assert cfg.temperature == 0.2
+        assert cfg.max_tokens == 512
+
+    def test_api_defaults(self):
+        cfg = Config().integrations.rest_api
+        assert cfg.enabled is True
+        assert cfg.host == "0.0.0.0"
+        assert cfg.port == 8000
+
+    def test_tool_defaults(self):
+        cfg = Config().integrations.tool
+        assert cfg.enabled is True
+        assert cfg.auto_trigger is True
 
 
-def test_config_from_yaml(tmp_path):
-    """Config should load values from a YAML file"""
-    yaml_content = """
-embedding_model: "test-model"
-chunk_size_tokens: 128
-top_k: 10
-"""
-    config_file = tmp_path / "config.yaml"
-    config_file.write_text(yaml_content)
-    
-    config = Config.from_yaml(str(config_file))
-    assert config.embedding_model == "test-model"
-    assert config.chunk_size_tokens == 128
-    assert config.top_k == 10
-    # Defaults should still apply for unset values
-    assert config.chunk_overlap_tokens == 50
+class TestConfigOverrides:
+    """Config should accept custom values."""
+
+    def test_custom_llm_model(self):
+        from rag_pipeline.config import LLMConfig
+        cfg = Config(llm=LLMConfig(model="llama3.2:latest", temperature=0.0))
+        assert cfg.llm.model == "llama3.2:latest"
+        assert cfg.llm.temperature == 0.0
+
+    def test_custom_chunk_size(self):
+        cfg = Config(chunk_size_tokens=512, top_k=10)
+        assert cfg.chunk_size_tokens == 512
+        assert cfg.top_k == 10
+
+    def test_custom_api_port(self):
+        from rag_pipeline.config import RestAPIConfig, IntegrationsConfig
+        cfg = Config(integrations=IntegrationsConfig(
+            rest_api=RestAPIConfig(port=9000)
+        ))
+        assert cfg.integrations.rest_api.port == 9000
+
+    def test_custom_keywords(self):
+        from rag_pipeline.config import ToolConfig, IntegrationsConfig
+        cfg = Config(integrations=IntegrationsConfig(
+            tool=ToolConfig(keywords=["delta", "spark"])
+        ))
+        assert "delta" in cfg.integrations.tool.keywords
+        assert "spark" in cfg.integrations.tool.keywords
 
 
-def test_config_from_missing_yaml():
-    """Config should use defaults when YAML file doesn't exist"""
-    config = Config.from_yaml("/nonexistent/config.yaml")
-    assert config.embedding_model == "sentence-transformers/all-mpnet-base-v2"
+class TestConfigConvenienceAliases:
+    """Convenience property aliases should work."""
+
+    def test_embedding_model_alias(self):
+        cfg = Config()
+        assert cfg.embedding_model == cfg.embeddings.model
+
+    def test_chunk_size_alias(self):
+        cfg = Config()
+        assert cfg.chunk_size == cfg.chunk_size_tokens
+
+    def test_chunk_overlap_alias(self):
+        cfg = Config()
+        assert cfg.chunk_overlap == cfg.chunk_overlap_tokens
 
 
-def test_config_has_single_api_key_field():
-    """Config should have exactly one llm_api_key field (regression test for duplicate bug)"""
-    config = Config()
-    assert hasattr(config, "llm_api_key")
-    assert config.llm_api_key == ""
+class TestConfigFileLoading:
+    """Config should load from YAML files."""
+
+    def test_load_missing_file_returns_defaults(self):
+        cfg = load_config("/nonexistent/config.yaml")
+        assert cfg.embeddings.model == "sentence-transformers/all-mpnet-base-v2"
+
+    def test_get_config_returns_same_instance(self):
+        """get_config should be idempotent."""
+        cfg1 = get_config()
+        cfg2 = get_config()
+        assert cfg1 is cfg2
+
+    def test_set_and_reset_config(self):
+        from rag_pipeline.config import LLMConfig, set_config as _set, reset_config as _reset
+        cfg = Config(llm=LLMConfig(model="custom-model"))
+        _set(cfg)
+        assert get_config().llm.model == "custom-model"
+        _reset()
+
+
+class TestDataSource:
+    """DataSource configuration."""
+
+    def test_url_source(self):
+        ds = DataSource(type="url", url="https://example.com", name="Test")
+        assert ds.type == "url"
+        assert ds.url == "https://example.com"
+
+    def test_local_source(self):
+        ds = DataSource(type="local", path="/data/docs", name="Local Docs")
+        assert ds.type == "local"
+        assert ds.path == "/data/docs"
+
+
+class TestToolConfig:
+    """Tool/MCP configuration."""
+
+    def test_keywords_from_config(self):
+        from rag_pipeline.config import ToolConfig, IntegrationsConfig
+        cfg = Config(integrations=IntegrationsConfig(
+            tool=ToolConfig(keywords=["delta lake", "databricks"])
+        ))
+        assert len(cfg.integrations.tool.keywords) == 2
+        assert "delta lake" in cfg.integrations.tool.keywords
