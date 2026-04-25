@@ -9,14 +9,25 @@ This pipeline answers questions about Databricks Delta Lake documentation using 
 ## Workflow
 
 ```
-User Question
+User Question: "How to create a Delta table?"
     ↓
-Step 1: Embed question → FAISS vector search → retrieve top-k chunks
+Step 1: Embedding + Retrieval
+  → EmbeddingModel.encode_single(question)
+  → FAISSIndex.search(query_embedding, k=5)
+  → top-5 relevant chunks
     ↓
-Step 2: Send chunks + strict prompt → LLM → answer
+Step 2: Generate with Strict Prompt
+  → chunks formatted into strict_prompt template
+  → LLMClient.generate_with_context(question, context)
+  → LLM API call (provider from config.yaml)
+  → answer using ONLY the retrieved context
     ↓
-Return { question, answer, sources }
+{sources: [...], answer: "..."}
 ```
+
+**Anti-hallucination mechanism:** The `strict_prompt` forces the LLM to answer only from retrieved context. If no relevant context exists, the LLM says "I don't have enough information" instead of hallucinating.
+
+See [docs/integrations.md](integrations.md) for the full LLM call chain per integration option.
 
 ## Setup
 
