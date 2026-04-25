@@ -1,4 +1,6 @@
 """Tests for LLM clients and factory."""
+import json
+
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -125,54 +127,77 @@ class TestOpenAILLM:
         assert "ollama" in str(exc.value)
 
 
+try:
+    import boto3
+except ImportError:
+    boto3 = None
+
+
 class TestBedrockLLM:
-    """Tests for BedrockLLM client."""
+    """Tests for BedrockLLM client.
+
+    Skipped if boto3 is not installed (Bedrock is an optional provider).
+    """
 
     def test_bedrock_generate(self):
-        """BedrockLLM should call AWS Bedrock Converse API."""
+        """BedrockLLM should call AWS Bedrock invoke_model."""
+        try:
+            import boto3
+        except ImportError:
+            pytest.skip("boto3 not installed")
+
         from rag_pipeline.llm.bedrock import BedrockLLM
 
-        mock_converse = MagicMock()
-        mock_converse.return_value = {
-            "output": {"message": {"content": [{"text": "Delta Lake provides ACID."}]}}
-        }
+        mock_invoke_result = {"completion": "Delta Lake provides ACID transactions."}
+        mock_body = MagicMock()
+        mock_body.read.return_value = json.dumps(mock_invoke_result).encode()
+        mock_response = {"body": mock_body}
 
         mock_bedrock = MagicMock()
-        mock_bedrock.converse = mock_converse
+        mock_bedrock.invoke_model.return_value = mock_response
 
-        with patch("rag_pipeline.llm.bedrock.boto3") as mock_boto3, \
-             patch("rag_pipeline.llm.bedrock.BotoConfig", MagicMock):
-            mock_boto3.client.return_value = mock_bedrock
+        with patch("rag_pipeline.llm.bedrock.boto3", boto3):
+            boto3.client.return_value = mock_bedrock
             llm = BedrockLLM(
                 model="anthropic.claude-3-5-sonnet-latest",
-                region="us-east-1",
+                base_url="us-east-1",
                 temperature=0.2,
                 max_tokens=512,
                 strict_prompt="",
             )
             result = llm.generate("What is Delta Lake?")
-            assert result == "Delta Lake provides ACID."
-            mock_converse.assert_called_once()
+            assert result == "Delta Lake provides ACID transactions."
+            mock_bedrock.invoke_model.assert_called_once()
 
-    def test_bedrock_generate_with_system(self):
-        """BedrockLLM should support system prompt."""
+    def test_bedrock_generate_with_context(self):
+        """generate_with_context should fill strict_prompt and call Bedrock."""
+        try:
+            import boto3
+        except ImportError:
+            pytest.skip("boto3 not installed")
+
         from rag_pipeline.llm.bedrock import BedrockLLM
 
-        mock_converse = MagicMock()
-        mock_converse.return_value = {
-            "output": {"message": {"content": [{"text": "Answer with context."}]}}
-        }
+        mock_invoke_result = {"completion": "Use Delta Lake."}
+        mock_body = MagicMock()
+        mock_body.read.return_value = json.dumps(mock_invoke_result).encode()
+        mock_response = {"body": mock_body}
 
         mock_bedrock = MagicMock()
-        mock_bedrock.converse = mock_converse
+        mock_bedrock.invoke_model.return_value = mock_response
 
-        with patch("rag_pipeline.llm.bedrock.boto3") as mock_boto3, \
-             patch("rag_pipeline.llm.bedrock.BotoConfig", MagicMock):
-            mock_boto3.client.return_value = mock_bedrock
-            llm = BedrockLLM(model="anthropic.claude-3-5-sonnet-latest", region="us-east-1")
-            result = llm.generate("What's the answer?", system="You are a helpful assistant.")
-            assert result == "Answer with context."
-            mock_converse.assert_called_once()
+        with patch("rag_pipeline.llm.bedrock.boto3", boto3):
+            boto3.client.return_value = mock_bedrock
+            llm = BedrockLLM(
+                model="anthropic.claude-3-5-sonnet-latest",
+                base_url="us-east-1",
+                strict_prompt="Context: {context}\nQuestion: {question}\nAnswer:",
+            )
+            result = llm.generate_with_context(
+                "How to create a table?", "Delta Lake syntax."
+            )
+            assert result == "Use Delta Lake."
+            mock_bedrock.invoke_model.assert_called_once()
 
 
 class TestAnthropicLLM:
