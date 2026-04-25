@@ -49,7 +49,75 @@ integrations:
 | **LangChain** | `get_langchain_tool()` | LangChain agents |
 | **Lambda** | Deploy `lambda_handler.py` to AWS | Serverless production |
 
-## Architecture
+---
+
+## Choose Your LLM
+
+This pipeline supports multiple LLM providers. Pick one based on your setup:
+
+### Option A: Ollama (Local) — Recommended for Beginners
+
+**Free, runs on your machine, no API key needed.**
+
+1. Install Ollama: https://ollama.com
+2. Pull a model: `ollama pull qwen3.5:cloud`
+3. Start Ollama: `ollama serve`
+4. Update `config.yaml`:
+
+```yaml
+llm:
+  provider: "ollama"
+  model: "qwen3.5:cloud"
+  base_url: "http://localhost:11434"
+```
+
+### Option B: OpenRouter (Free Cloud) — No Local Setup
+
+**Free credits, cloud-hosted, works instantly.**
+
+1. Get free API key: https://openrouter.ai/credits
+2. Update `config.yaml`:
+
+```yaml
+llm:
+  provider: "openai"
+  model: "deepseek-ai/DeepSeek-V3"  # Free model
+  base_url: "https://openrouter.ai/api/v1"
+  api_key: "sk-or-v1-..."  # Your OpenRouter API key
+```
+
+### Option C: Anthropic Claude (Paid) — Best Quality
+
+**Highest quality answers, pay per use.**
+
+1. Get API key: https://console.anthropic.com
+2. Update `config.yaml`:
+
+```yaml
+llm:
+  provider: "anthropic"
+  model: "claude-3-5-sonnet-latest"
+  base_url: "https://api.anthropic.com"
+  api_key: "sk-ant-..."  # Your Anthropic API key
+```
+
+### Option D: AWS Bedrock (Enterprise)
+
+**Enterprise use, no API key management.**
+
+1. Configure AWS credentials
+2. Update `config.yaml`:
+
+```yaml
+llm:
+  provider: "bedrock"
+  model: "anthropic.claude-3-5-sonnet-latest"
+  base_url: "us-east-1"  # Your AWS region
+```
+
+---
+
+## Configuration Reference
 
 ```
 src/rag_pipeline/
