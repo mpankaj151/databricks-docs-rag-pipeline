@@ -227,3 +227,28 @@ class TestAnthropicLLM:
                 "Use CREATE TABLE my_table USING delta",
             )
             assert result == "Answer"
+
+
+class TestLLMPackageExports:
+    """Tests that llm package exports all expected names."""
+
+    def test_llm_exports_factory(self):
+        """llm package should export LLMFactory."""
+        from rag_pipeline.llm import LLMFactory
+        factory = LLMFactory(provider="ollama")
+        assert hasattr(factory, "create")
+
+    def test_llm_exports_all_clients(self):
+        """llm package should export all LLM clients."""
+        from rag_pipeline.llm import OllamaLLM, AnthropicLLM, OpenAILLM, BedrockLLM
+        assert OllamaLLM is not None
+        assert AnthropicLLM is not None
+        assert OpenAILLM is not None
+        assert BedrockLLM is not None
+
+    def test_llm_exports_default_strict_prompt(self):
+        """llm package should export DEFAULT_STRICT_PROMPT."""
+        from rag_pipeline.llm import DEFAULT_STRICT_PROMPT
+        assert "Answer ONLY from the context" in DEFAULT_STRICT_PROMPT
+        assert "{context}" in DEFAULT_STRICT_PROMPT
+        assert "{question}" in DEFAULT_STRICT_PROMPT
