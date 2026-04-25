@@ -30,3 +30,7 @@ Thumbs.db
 # Python build
 egg-info/
 *.egg-info/
+
+# Development specs and plans (local only)
+docs/superpowers/plans/
+docs/superpowers/specs/
