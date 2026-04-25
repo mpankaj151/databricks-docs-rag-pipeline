@@ -5,6 +5,22 @@ from typing import Optional, List
 import yaml
 from pydantic import BaseModel, Field, ConfigDict
 
+DEFAULT_STRICT_PROMPT = """You must answer using ONLY the provided context below.
+
+RULES:
+1. Answer ONLY from the context provided
+2. If the context doesn't contain the answer, say "I don't have enough information"
+3. NEVER use your own knowledge or make assumptions
+4. Be concise and factual
+5. If code examples are in the context, include them in your answer
+
+Context:
+{context}
+
+Question: {question}
+
+Answer (using ONLY context above):"""
+
 
 class DataSource(BaseModel):
     """A data source for documentation."""
@@ -35,6 +51,7 @@ class LLMConfig(BaseModel):
     temperature: float = 0.2
     max_tokens: int = 512
     api_key: str = ""
+    strict_prompt: str = ""
 
 
 class RestAPIConfig(BaseModel):
@@ -132,3 +149,20 @@ def reset_config() -> None:
     """Reset the global config (useful for testing)."""
     global _config
     _config = None
+
+
+DEFAULT_STRICT_PROMPT = """You must answer using ONLY the provided context below.
+
+RULES:
+1. Answer ONLY from the context provided
+2. If the context doesn't contain the answer, say "I don't have enough information"
+3. NEVER use your own knowledge or make assumptions
+4. Be concise and factual
+5. If code examples are in the context, include them in your answer
+
+Context:
+{context}
+
+Question: {question}
+
+Answer (using ONLY context above):"""
