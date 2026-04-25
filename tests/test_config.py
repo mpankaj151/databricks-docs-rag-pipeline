@@ -127,6 +127,35 @@ class TestDataSource:
         assert ds.path == "/data/docs"
 
 
+class TestLLMClientFields:
+    """Tests for LLMConfig provider and strict_prompt fields."""
+
+    def test_llm_provider_default(self):
+        """provider should default to 'ollama'."""
+        from rag_pipeline.config import Config, LLMConfig
+        cfg = Config()
+        assert cfg.llm.provider == "ollama"
+
+    def test_llm_provider_custom(self):
+        """provider can be set to 'anthropic'."""
+        from rag_pipeline.config import Config, LLMConfig
+        cfg = Config(llm=LLMConfig(provider="anthropic", model="claude-test",
+                                  api_key="sk-test"))
+        assert cfg.llm.provider == "anthropic"
+
+    def test_strict_prompt_default_empty(self):
+        """strict_prompt should default to empty string."""
+        from rag_pipeline.config import Config
+        cfg = Config()
+        assert cfg.llm.strict_prompt == ""
+
+    def test_strict_prompt_custom(self):
+        """strict_prompt can be set in config."""
+        from rag_pipeline.config import Config, LLMConfig
+        cfg = Config(llm=LLMConfig(strict_prompt="Custom prompt"))
+        assert "Custom prompt" in cfg.llm.strict_prompt
+
+
 class TestToolConfig:
     """Tool/MCP configuration."""
 
