@@ -1,4 +1,5 @@
 """Main RAG Pipeline - Two-Step RAG to prevent hallucination."""
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from rag_pipeline.config import get_config
@@ -26,8 +27,9 @@ class RAGPipeline:
             model_name=self.config.embeddings.model
         )
 
-        index_path = "data/delta_lake.index"
-        meta_path = "data/vectometa.jsonl"
+        data_dir = Path(__file__).parent.parent.parent.parent / "data"
+        index_path = str(data_dir / "delta_lake.index")
+        meta_path = str(data_dir / "vectometa.jsonl")
 
         try:
             self.index = FAISSIndex.load(index_path, meta_path)

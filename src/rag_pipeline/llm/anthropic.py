@@ -52,6 +52,9 @@ class AnthropicLLM:
             "max_tokens": self.max_tokens,
         }
 
+        if system:
+            payload["system"] = system
+
         response = requests.post(
             f"{self.base_url}/v1/messages",
             headers=self._get_headers(),

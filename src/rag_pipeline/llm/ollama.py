@@ -42,9 +42,14 @@ class OllamaLLM:
             "stream": False,
         }
 
+        headers = {}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
         response = requests.post(
             f"{self.base_url}/api/chat",
             json=payload,
+            headers=headers,
             timeout=120,
         )
         response.raise_for_status()
