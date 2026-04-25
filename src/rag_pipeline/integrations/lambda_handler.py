@@ -1,22 +1,39 @@
-"""AWS Lambda handler for RAG pipeline."""
+"""AWS Lambda handler for RAG pipeline.
+
+Uses module-level cache to reuse the loaded RAGPipeline across
+warm Lambda invocations — avoids paying the cold-start cost
+(embedding model load) on every call.
+"""
 import json
+
+from rag_pipeline.pipeline.rag import RAGPipeline
+from rag_pipeline.config import get_config
+
+# Module-level singleton — persists across warm invocations
+_pipeline = None
 
 
 def handler(event, context):
-    """AWS Lambda entry point."""
+    """AWS Lambda entry point.
+
+    First cold call: loads embedding model + LLM (~30s).
+    Subsequent warm calls: reuse already-loaded pipeline (~50ms).
+    """
+    global _pipeline
+
     question = event.get("question") or (event.get("body") or {}).get("question")
 
     if not question:
         return {"statusCode": 400, "body": json.dumps({"error": "question is required"})}
 
     try:
-        from rag_pipeline.config import get_config
-        from rag_pipeline.pipeline.rag import RAGPipeline
+        # Load once, reuse forever
+        if _pipeline is None:
+            config = get_config()
+            _pipeline = RAGPipeline()
+            _pipeline.load()  # cold start cost paid here
 
-        config = get_config()
-        pipeline = RAGPipeline()
-        pipeline.load()
-        result = pipeline.query(question)
+        result = _pipeline.query(question)
 
         return {
             "statusCode": 200,

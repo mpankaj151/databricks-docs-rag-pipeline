@@ -124,9 +124,41 @@ class TestLambdaHandler:
     def test_exception_returns_500(self):
         from rag_pipeline.integrations.lambda_handler import handler
         from unittest.mock import patch
-        with patch("rag_pipeline.pipeline.rag.RAGPipeline", side_effect=Exception("DB error")):
+        with patch("rag_pipeline.integrations.lambda_handler.RAGPipeline", side_effect=Exception("DB error")):
+            import rag_pipeline.integrations.lambda_handler as lambda_module
+            lambda_module._pipeline = None  # Reset cache to trigger new pipeline creation
             result = handler({"question": "What is Delta Lake?"}, None)
         assert result["statusCode"] == 500
+
+
+class TestLambdaCache:
+    """Tests for Lambda module-level cache."""
+
+    def test_lambda_module_cache(self):
+        """Lambda handler should reuse pipeline across warm invocations."""
+        from rag_pipeline.integrations.lambda_handler import handler
+        from unittest.mock import patch, MagicMock
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.query.return_value = {
+            "answer": "Delta Lake provides ACID.",
+            "sources": [],
+        }
+
+        with patch("rag_pipeline.integrations.lambda_handler.RAGPipeline") as mock_cls:
+            mock_cls.return_value = mock_pipeline
+            import rag_pipeline.integrations.lambda_handler as lambda_module
+            lambda_module._pipeline = None  # Reset cache
+
+            # First call — cold (loads pipeline)
+            result1 = handler({"question": "What is Delta Lake?"}, None)
+            assert mock_pipeline.load.call_count == 1
+
+            # Second call — warm (reuses loaded pipeline)
+            result2 = handler({"question": "What is MERGE?"}, None)
+            # load() should NOT be called again
+            assert mock_pipeline.load.call_count == 1
+            assert mock_pipeline.query.call_count == 2
 
 
 class TestCLIModule:
