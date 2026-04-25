@@ -1,2 +1,0 @@
-[console_scripts]
-rag-cli = rag_pipeline.integrations.cli:main
