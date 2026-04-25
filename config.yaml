@@ -11,7 +11,7 @@ embeddings:
 llm:
   provider: "ollama"                  # ollama | anthropic | openai | bedrock
   model: "qwen3.5:cloud"
-  base_url: "http://localhost:11434"
+  base_url: "https://ollama.com"       # local: http://localhost:11434 | cloud: https://ollama.com
   temperature: 0.2
   max_tokens: 512
   api_key: ""                        # set or use env var
