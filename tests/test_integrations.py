@@ -44,6 +44,51 @@ class TestToolDefinition:
         assert len(keywords) > 0
         assert "delta lake" in keywords
 
+    def test_tool_execute_direct(self):
+        """execute(api_url=None) should call RAGPipeline directly."""
+        from rag_pipeline.integrations.tool import ToolDefinition
+        from unittest.mock import patch, MagicMock
+
+        tool = ToolDefinition(api_url=None)
+
+        with patch("rag_pipeline.pipeline.rag.RAGPipeline") as mock_cls:
+            mock_pipeline = MagicMock()
+            mock_pipeline.query.return_value = {
+                "answer": "Delta Lake provides ACID.",
+                "sources": [],
+            }
+            mock_cls.return_value = mock_pipeline
+
+            result = tool.execute("What is Delta Lake?")
+
+            assert result["answer"] == "Delta Lake provides ACID."
+            mock_pipeline.query.assert_called_once_with("What is Delta Lake?")
+
+    def test_tool_execute_via_api(self):
+        """execute(api_url set) should call REST API."""
+        from rag_pipeline.integrations.tool import ToolDefinition
+        from unittest.mock import patch, MagicMock
+
+        tool = ToolDefinition(api_url="http://localhost:8000")
+
+        with patch("rag_pipeline.integrations.tool.requests.post") as mock_post:
+            mock_post.return_value.json.return_value = {
+                "answer": "Delta Lake provides ACID.",
+                "sources": [],
+            }
+
+            result = tool.execute("What is Delta Lake?")
+
+            mock_post.assert_called_once()
+            assert "tool/execute" in mock_post.call_args[0][0]
+            assert result["answer"] == "Delta Lake provides ACID."
+
+    def test_tool_should_auto_trigger_false(self):
+        """should_auto_trigger should return False for non-RAG questions."""
+        from rag_pipeline.integrations.tool import ToolDefinition
+        tool = ToolDefinition()
+        assert tool.should_auto_trigger("What is the weather?") is False
+
 
 class TestLangChainTool:
     """LangChain integration."""
@@ -79,9 +124,41 @@ class TestLambdaHandler:
     def test_exception_returns_500(self):
         from rag_pipeline.integrations.lambda_handler import handler
         from unittest.mock import patch
-        with patch("rag_pipeline.pipeline.rag.RAGPipeline", side_effect=Exception("DB error")):
+        with patch("rag_pipeline.integrations.lambda_handler.RAGPipeline", side_effect=Exception("DB error")):
+            import rag_pipeline.integrations.lambda_handler as lambda_module
+            lambda_module._pipeline = None  # Reset cache to trigger new pipeline creation
             result = handler({"question": "What is Delta Lake?"}, None)
         assert result["statusCode"] == 500
+
+
+class TestLambdaCache:
+    """Tests for Lambda module-level cache."""
+
+    def test_lambda_module_cache(self):
+        """Lambda handler should reuse pipeline across warm invocations."""
+        from rag_pipeline.integrations.lambda_handler import handler
+        from unittest.mock import patch, MagicMock
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.query.return_value = {
+            "answer": "Delta Lake provides ACID.",
+            "sources": [],
+        }
+
+        with patch("rag_pipeline.integrations.lambda_handler.RAGPipeline") as mock_cls:
+            mock_cls.return_value = mock_pipeline
+            import rag_pipeline.integrations.lambda_handler as lambda_module
+            lambda_module._pipeline = None  # Reset cache
+
+            # First call — cold (loads pipeline)
+            result1 = handler({"question": "What is Delta Lake?"}, None)
+            assert mock_pipeline.load.call_count == 1
+
+            # Second call — warm (reuses loaded pipeline)
+            result2 = handler({"question": "What is MERGE?"}, None)
+            # load() should NOT be called again
+            assert mock_pipeline.load.call_count == 1
+            assert mock_pipeline.query.call_count == 2
 
 
 class TestCLIModule:

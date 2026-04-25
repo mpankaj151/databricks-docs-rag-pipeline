@@ -9,11 +9,31 @@ embeddings:
 
 # ---------- LLM ----------
 llm:
-  provider: "ollama"
+  provider: "ollama"                  # ollama | anthropic | openai | bedrock
   model: "qwen3.5:cloud"
   base_url: "http://localhost:11434"
   temperature: 0.2
   max_tokens: 512
+  api_key: ""                        # set or use env var
+
+  # Anti-hallucination prompt — per-provider override
+  # Falls back to built-in default if empty
+  strict_prompt: |
+    You must answer using ONLY the provided context below.
+
+    RULES:
+    1. Answer ONLY from the context provided
+    2. If the context doesn't contain the answer, say "I don't have enough information"
+    3. NEVER use your own knowledge or make assumptions
+    4. Be concise and factual
+    5. If code examples are in the context, include them in your answer
+
+    Context:
+    {context}
+
+    Question: {question}
+
+    Answer (using ONLY context above):
 
 # ---------- CHUNKING ----------
 chunk_size_tokens: 256

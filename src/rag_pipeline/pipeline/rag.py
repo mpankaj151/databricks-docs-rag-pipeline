@@ -4,7 +4,7 @@ from typing import Optional, List, Dict, Any
 from rag_pipeline.config import get_config
 from rag_pipeline.core.embed import EmbeddingModel
 from rag_pipeline.core.vectorstore import FAISSIndex
-from rag_pipeline.llm.ollama import OllamaLLM
+from rag_pipeline.llm._factory import LLMFactory
 
 
 class RAGPipeline:
@@ -18,7 +18,7 @@ class RAGPipeline:
         self.config = config or get_config()
         self.embedding_model: Optional[EmbeddingModel] = None
         self.index: Optional[FAISSIndex] = None
-        self.llm: Optional[OllamaLLM] = None
+        self.llm: Optional[Any] = None
 
     def load(self) -> None:
         """Load all components (embedding model, vector index, LLM)."""
@@ -34,11 +34,14 @@ class RAGPipeline:
         except Exception:
             self.index = None
 
-        self.llm = OllamaLLM(
+        factory = LLMFactory(provider=self.config.llm.provider)
+        self.llm = factory.create(
             model=self.config.llm.model,
             base_url=self.config.llm.base_url,
             temperature=self.config.llm.temperature,
             max_tokens=self.config.llm.max_tokens,
+            api_key=self.config.llm.api_key,
+            strict_prompt=self.config.llm.strict_prompt,
         )
 
     def query(self, question: str) -> Dict[str, Any]:
@@ -72,23 +75,8 @@ class RAGPipeline:
                 "sources": [],
             }
 
-        # Step 2: Generate with strict prompt (anti-hallucination)
-        strict_prompt = f"""You must answer using ONLY the provided context below.
-
-RULES:
-1. Answer ONLY from the context provided
-2. If the context doesn't contain the answer, say "I don't have enough information"
-3. NEVER use your own knowledge
-4. Be concise and factual
-
-Context:
-{context}
-
-Question: {question}
-
-Answer (using ONLY context above):"""
-
-        answer = self.llm.generate(strict_prompt) if self.llm else "LLM not available"
+        # Step 2: Generate — strict_prompt comes from the LLM client
+        answer = self.llm.generate_with_context(question, context) if self.llm else "LLM not available"
 
         return {
             "question": question,

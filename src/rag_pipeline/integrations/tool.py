@@ -35,14 +35,25 @@ class ToolDefinition:
         return self.keyword_detector.should_use_rag(question)
 
     def execute(self, question: str) -> dict:
-        """Execute the tool."""
-        response = requests.post(
-            f"{self.api_url}/tool/execute",
-            json={"question": question},
-            timeout=120,
-        )
-        response.raise_for_status()
-        return response.json()
+        """Execute the tool.
+
+        Calls REST API if api_url is set, otherwise calls RAGPipeline directly.
+        """
+        if self.api_url:
+            # REST API path — for distributed setups
+            response = requests.post(
+                f"{self.api_url}/tool/execute",
+                json={"question": question},
+                timeout=120,
+            )
+            response.raise_for_status()
+            return response.json()
+        else:
+            # Direct path — no server needed, runs RAGPipeline in-process
+            from rag_pipeline.pipeline.rag import RAGPipeline
+            pipeline = RAGPipeline()
+            pipeline.load()
+            return pipeline.query(question)
 
     def get_keywords(self) -> list:
         """Get trigger keywords."""

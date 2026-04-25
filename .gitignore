@@ -27,6 +27,10 @@ Thumbs.db
 # Model cache
 .cache/
 
+# Python build
+egg-info/
+*.egg-info/
+
 # Development specs and plans (local only)
 docs/superpowers/plans/
 docs/superpowers/specs/
