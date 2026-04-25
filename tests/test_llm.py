@@ -140,7 +140,8 @@ class TestBedrockLLM:
         mock_bedrock = MagicMock()
         mock_bedrock.converse = mock_converse
 
-        with patch("rag_pipeline.llm.bedrock.boto3") as mock_boto3:
+        with patch("rag_pipeline.llm.bedrock.boto3") as mock_boto3, \
+             patch("rag_pipeline.llm.bedrock.BotoConfig", MagicMock):
             mock_boto3.client.return_value = mock_bedrock
             llm = BedrockLLM(
                 model="anthropic.claude-3-5-sonnet-latest",
@@ -165,7 +166,8 @@ class TestBedrockLLM:
         mock_bedrock = MagicMock()
         mock_bedrock.converse = mock_converse
 
-        with patch("rag_pipeline.llm.bedrock.boto3") as mock_boto3:
+        with patch("rag_pipeline.llm.bedrock.boto3") as mock_boto3, \
+             patch("rag_pipeline.llm.bedrock.BotoConfig", MagicMock):
             mock_boto3.client.return_value = mock_bedrock
             llm = BedrockLLM(model="anthropic.claude-3-5-sonnet-latest", region="us-east-1")
             result = llm.generate("What's the answer?", system="You are a helpful assistant.")
